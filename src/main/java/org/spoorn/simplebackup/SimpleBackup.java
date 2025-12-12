@@ -18,12 +18,12 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.util.WorldSavePath;
+import net.minecraft.world.level.storage.LevelResource;
 
 public class SimpleBackup implements ModInitializer {
     public static final String MOD_ID = "simplebackup";
@@ -61,8 +61,8 @@ public class SimpleBackup implements ModInitializer {
             if (enableAutomaticBackups) {
                 LOGGER.info("Automatic backups are enabled");
                 MinecraftServerAccessor accessor = (MinecraftServerAccessor) server;
-                String worldFolderName = accessor.getSession().getDirectoryName();
-                Path worldSavePath = accessor.getSession().getDirectory(WorldSavePath.ROOT).getParent();
+                String worldFolderName = accessor.getSession().getLevelId();
+                Path worldSavePath = accessor.getSession().getLevelPath(LevelResource.ROOT).getParent();
 
                 int backupIntervals = ModConfig.getInstance().backupIntervalInSeconds;
                 LOGGER.info("Scheduling a backup every {} seconds...", Math.max(10, backupIntervals));
@@ -108,8 +108,8 @@ public class SimpleBackup implements ModInitializer {
             if (ModConfig.getInstance().enableServerStoppedBackup) {
                 LOGGER.info("Server has stopped - creating a backup");
                 MinecraftServerAccessor accessor = (MinecraftServerAccessor) server;
-                String worldFolderName = accessor.getSession().getDirectoryName();
-                Path worldSavePath = accessor.getSession().getDirectory(WorldSavePath.ROOT).getParent();
+                String worldFolderName = accessor.getSession().getLevelId();
+                Path worldSavePath = accessor.getSession().getLevelPath(LevelResource.ROOT).getParent();
 
                 SimpleBackupTask serverStopBackup = SimpleBackupTask.builder(worldFolderName, worldSavePath, server)
                                 .build();
@@ -126,27 +126,27 @@ public class SimpleBackup implements ModInitializer {
 
         // Commands
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            dispatcher.register(CommandManager.literal("simplebackup")
-                    .requires(ctx -> ctx.hasPermissionLevel(4))
-                    .then(CommandManager.literal("start")
+            dispatcher.register(Commands.literal("simplebackup")
+                    .requires(ctx -> ctx.hasPermission(ModConfig.getInstance().permissionLevelForManualBackups))
+                    .then(Commands.literal("start")
                         .executes(c -> this.triggerManualBackup(c, ModConfig.getInstance().backupFormat)))
-                    .then(CommandManager.literal("zip")
+                    .then(Commands.literal("zip")
                         .executes(c -> this.triggerManualBackup(c, SimpleBackupUtil.ZIP_FORMAT)))
-                    .then(CommandManager.literal("directory")
+                    .then(Commands.literal("directory")
                         .executes(c -> this.triggerManualBackup(c, SimpleBackupUtil.DIRECTORY_FORMAT)))
-                    .then(CommandManager.literal("lz4")
+                    .then(Commands.literal("lz4")
                         .executes(c -> this.triggerManualBackup(c, SimpleBackupUtil.LZ4_FORMAT)))
                     );
         });
     }
 
-    private int triggerManualBackup(CommandContext<ServerCommandSource> c, String backupFormat) {
+    private int triggerManualBackup(CommandContext<CommandSourceStack> c, String backupFormat) {
         Map<String, String> broadcastMessages = ModConfig.getInstance().broadcastMessages;
         try {
-            ServerCommandSource commandSource = c.getSource();
+            CommandSourceStack commandSource = c.getSource();
             // Check manual backups enabled
             if (!ModConfig.getInstance().enableManualBackups) {
-                commandSource.sendFeedback(() -> Text.literal(broadcastMessages.getOrDefault("simplebackup.manualbackup.disabled",
+                commandSource.sendSuccess(() -> Component.literal(broadcastMessages.getOrDefault("simplebackup.manualbackup.disabled",
                         "Manual backups are disabled by the server!"))
                         .setStyle(Style.EMPTY.withColor(16433282)), true);
                 return 1;
@@ -154,38 +154,30 @@ public class SimpleBackup implements ModInitializer {
 
             boolean fromPlayer = commandSource.getPlayer() != null;
 
-            // Check permissions
-            if (fromPlayer && !commandSource.getPlayer().hasPermissionLevel(ModConfig.getInstance().permissionLevelForManualBackups)) {
-                commandSource.sendFeedback(() -> Text.literal(broadcastMessages.getOrDefault("simplebackup.manualbackup.notallowed",
-                        "You don't have permissions to trigger a manual backup!  Sorry :("))
-                        .setStyle(Style.EMPTY.withColor(16433282)), true);
-                return 1;
-            }
-
             // Try manual backup
             synchronized (manualBackupTask) {
                 if (manualBackupTask.get() != null) {
-                    commandSource.sendFeedback(() -> Text.literal(broadcastMessages.getOrDefault("simplebackup.manualbackup.alreadyexists",
+                    commandSource.sendSuccess(() -> Component.literal(broadcastMessages.getOrDefault("simplebackup.manualbackup.alreadyexists",
                             "There is already an ongoing manual backup.  Please wait for it to finish before starting another!"))
                             .setStyle(Style.EMPTY.withColor(16433282)), true);
                 } else {
                     if (fromPlayer) {
-                        commandSource.getServer().getPlayerManager().broadcast(
+                        commandSource.getServer().getPlayerList().broadcastSystemMessage(
                                 c.getSource().getPlayer().getDisplayName().copy().append(
-                                        Text.literal(broadcastMessages.getOrDefault("simplebackup.manualbackup.started",
+                                        Component.literal(broadcastMessages.getOrDefault("simplebackup.manualbackup.started",
                                                 " triggered a manual backup"))
                                                 .setStyle(Style.EMPTY.withColor(16433282))), false);
                     } else {
                         // Could not find a player, so broadcasting as a general message
-                        commandSource.getServer().getPlayerManager().broadcast(Text.literal("Server" +
+                        commandSource.getServer().getPlayerList().broadcastSystemMessage(Component.literal("Server" +
                                 broadcastMessages.getOrDefault("simplebackup.manualbackup.started", " triggered a manual backup"))
                                 .setStyle(Style.EMPTY.withColor(16433282)), false);
                     }
 
                     MinecraftServer server = commandSource.getServer();
                     MinecraftServerAccessor accessor = (MinecraftServerAccessor) server;
-                    String worldFolderName = accessor.getSession().getDirectoryName();
-                    Path worldSavePath = accessor.getSession().getDirectory(WorldSavePath.ROOT).getParent();
+                    String worldFolderName = accessor.getSession().getLevelId();
+                    Path worldSavePath = accessor.getSession().getLevelPath(LevelResource.ROOT).getParent();
 
                     SimpleBackupTask serverStopBackup = SimpleBackupTask.builder(worldFolderName, worldSavePath, server, backupFormat)
                             .build();

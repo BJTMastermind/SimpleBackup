@@ -9,18 +9,17 @@ import org.spoorn.simplebackup.compressors.LZ4Compressor;
 import org.spoorn.simplebackup.compressors.ZipCompressor;
 import org.spoorn.simplebackup.config.ModConfig;
 import org.spoorn.simplebackup.util.SimpleBackupUtil;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.PlayerManager;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
+import net.minecraft.server.players.PlayerList;
 
 public class SimpleBackupTask implements Runnable {
     private static final DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
-    private static Text BROADCAST1;
-    private static Text SUCCESS_BROADCAST;
-    private static Text FAILED_BROADCAST1;
-    private static Text FAILED_BROADCAST2;
+    private static Component BROADCAST1;
+    private static Component SUCCESS_BROADCAST;
+    private static Component FAILED_BROADCAST1;
+    private static Component FAILED_BROADCAST2;
 
     public final Object lock = new Object();
     public boolean isProcessing = false;
@@ -43,10 +42,10 @@ public class SimpleBackupTask implements Runnable {
 
     public static void init() {
         Map<String, String> broadcastMessages = ModConfig.getInstance().broadcastMessages;
-        BROADCAST1 = Text.literal(broadcastMessages.getOrDefault("simplebackup.backup.broadcast", "Starting server backup...")).setStyle(Style.EMPTY.withColor(13543679));
-        SUCCESS_BROADCAST = Text.literal(broadcastMessages.getOrDefault("simplebackup.backup.success.broadcast", "Server was successfully backed up to "));
-        FAILED_BROADCAST1 = Text.literal(broadcastMessages.getOrDefault("simplebackup.backup.failed.broadcast1", "Server failed to backup to "));
-        FAILED_BROADCAST2 = Text.literal(broadcastMessages.getOrDefault("simplebackup.backup.failed.broadcast2", ".  Please check the server logs for errors!"));
+        BROADCAST1 = Component.literal(broadcastMessages.getOrDefault("simplebackup.backup.broadcast", "Starting server backup...")).setStyle(Style.EMPTY.withColor(13543679));
+        SUCCESS_BROADCAST = Component.literal(broadcastMessages.getOrDefault("simplebackup.backup.success.broadcast", "Server was successfully backed up to "));
+        FAILED_BROADCAST1 = Component.literal(broadcastMessages.getOrDefault("simplebackup.backup.failed.broadcast1", "Server failed to backup to "));
+        FAILED_BROADCAST2 = Component.literal(broadcastMessages.getOrDefault("simplebackup.backup.failed.broadcast2", ".  Please check the server logs for errors!"));
     }
 
     public static SimpleBackupTaskBuilder builder(final String worldFolderName, final Path worldSavePath,
@@ -68,7 +67,7 @@ public class SimpleBackupTask implements Runnable {
 
     @Override
     public void run() {
-        PlayerManager playerManager = this.server.getPlayerManager();
+        PlayerList playerManager = this.server.getPlayerList();
 
         // wait at start
         if (!terminated && this.backupIntervalInMillis > 1000) {
@@ -91,7 +90,7 @@ public class SimpleBackupTask implements Runnable {
 
     public void backup() {
         this.isProcessing = true;
-        PlayerManager playerManager = this.server.getPlayerManager();
+        PlayerList playerManager = this.server.getPlayerList();
 
         String timeStr = dtf.format(LocalDateTime.now());
         SimpleBackupUtil.broadcastMessage(BROADCAST1, playerManager);
@@ -109,19 +108,19 @@ public class SimpleBackupTask implements Runnable {
         }
         boolean copied = SimpleBackupUtil.backup(this.worldSavePath, this.worldFolderName, timeStr, this.backupFormat)
                 && SimpleBackupUtil.deleteStaleBackupFiles();
-        Text relFolderPath = Text.literal(broadcastBackupPath);
+        Component relFolderPath = Component.literal(broadcastBackupPath);
         if (copied) {
             SimpleBackup.LOGGER.info("Successfully backed up world [{}] to [{}]", this.worldFolderName, broadcastBackupPath);
-            SimpleBackupUtil.broadcastMessage(SUCCESS_BROADCAST.copyContentOnly().append(relFolderPath).setStyle(Style.EMPTY.withColor(8060843)), playerManager);
+            SimpleBackupUtil.broadcastMessage(SUCCESS_BROADCAST.plainCopy().append(relFolderPath).setStyle(Style.EMPTY.withColor(8060843)), playerManager);
         } else {
             SimpleBackup.LOGGER.error("Server backup for world [{}] failed!  Check the logs for errors.", this.worldFolderName);
-            SimpleBackupUtil.broadcastMessage(FAILED_BROADCAST1.copyContentOnly().append(relFolderPath).append(FAILED_BROADCAST2).setStyle(Style.EMPTY.withColor(16754871)), playerManager);
+            SimpleBackupUtil.broadcastMessage(FAILED_BROADCAST1.plainCopy().append(relFolderPath).append(FAILED_BROADCAST2).setStyle(Style.EMPTY.withColor(16754871)), playerManager);
         }
         this.isProcessing = false;
     }
 
     // This doesn't account for spurious wakeups!
-    private void waitToContinue(PlayerManager playerManager) {
+    private void waitToContinue(PlayerList playerManager) {
         // Automatic periodic backups
         try {
             // Technically there is an extremely small window where all server players can log out between the
@@ -130,7 +129,7 @@ public class SimpleBackupTask implements Runnable {
             // online, or the single player game is paused.  This does mean the next backup's changed content
             // might span a duration less than the backup intervals, but this is intended as I think it's better
             // than trying to make sure each backup has an exact "online running" difference from the previous.
-            if ((ModConfig.getInstance().onlyBackupIfPlayersOnline && playerManager.getCurrentPlayerCount() == 0)
+            if ((ModConfig.getInstance().onlyBackupIfPlayersOnline && playerManager.getPlayerCount() == 0)
                 || (this.server.isSingleplayer())) {
                 // Wait until a player logs on
                 synchronized (this.lock) {

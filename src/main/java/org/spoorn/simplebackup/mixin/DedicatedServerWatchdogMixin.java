@@ -1,6 +1,6 @@
 package org.spoorn.simplebackup.mixin;
 
-import net.minecraft.server.dedicated.DedicatedServerWatchdog;
+import net.minecraft.server.dedicated.ServerWatchdog;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -9,9 +9,9 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spoorn.simplebackup.SimpleBackup;
 import org.spoorn.simplebackup.SimpleBackupTask;
 
-@Mixin(DedicatedServerWatchdog.class)
+@Mixin(ServerWatchdog.class)
 public class DedicatedServerWatchdogMixin {
-    @Shadow @Final private long maxTickTime;
+    @Shadow @Final private long maxTickTimeNanos;
 
     /**
      * If we are doing a server ended backup, it may take longer than the max-tick-time set in server.properties.
@@ -19,7 +19,7 @@ public class DedicatedServerWatchdogMixin {
      */
     @ModifyVariable(method = "run", at = @At(value = "STORE"), ordinal = 2)
     private long bypassWatchdogForServerEndBackup(long n) {
-        if (n > this.maxTickTime) {
+        if (n > this.maxTickTimeNanos) {
             SimpleBackupTask serverEndBackupTask = SimpleBackup.serverEndBackupTask.get();
             if (serverEndBackupTask != null && serverEndBackupTask.isProcessing) {
                 SimpleBackup.LOGGER.info("SimpleBackup server end backup task is still ongoing past max-tick-time.  Waiting for it to finish before stopping server...");

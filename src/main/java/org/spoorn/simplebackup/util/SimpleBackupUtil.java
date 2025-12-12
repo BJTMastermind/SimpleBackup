@@ -25,8 +25,8 @@ import org.spoorn.simplebackup.compressors.ZipCompressor;
 import org.spoorn.simplebackup.config.ModConfig;
 
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.server.PlayerManager;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.players.PlayerList;
 
 public class SimpleBackupUtil {
     public static final String ZIP_FORMAT = "ZIP";
@@ -56,9 +56,9 @@ public class SimpleBackupUtil {
         }
     }
 
-    public static void broadcastMessage(Text message, PlayerManager playerManager) {
+    public static void broadcastMessage(Component message, PlayerList playerManager) {
         if (ModConfig.getInstance().broadcastBackupMessage) {
-            playerManager.broadcast(message, false);
+            playerManager.broadcastSystemMessage(message, false);
         }
     }
 
