@@ -12,7 +12,7 @@ For a technical deep dive on how this was implemented, see https://github.com/sp
 - Manual backups can be triggered with command `/simplebackup start`, `/simplebackup zip`, `/simplebackup lz4`, `/simplebackup directory`
 - Manual backup permissions can be configured in the config
 - Backup is stored in the game directory under backup/ parallel to mods/ and config/ folders, or can be configured to any absolute path in the system
-- Backup file format is YYYY-MM-DD_HH-MM-SS (example: backup/2022-05-04_05-04-13
+- Backup file format is YYYY-MM-DD_HH-MM-SS (example: backup/2022-05-04_05-04-13)
 - Message will be broadcast to players when backup is in progress.  The message is configured in the config to allow for language translations and keep the mod completely server-side.  The messages can be disabled
 - And yeah, the mod is only required on the server!
 
@@ -29,6 +29,6 @@ You can tune all the features in the config file at `config/simplebackup.json5`.
 
 ## Dependencies
 This mod requires:
-- Fabric API - https://www.curseforge.com/minecraft/mc-mods/fabric-api 
- 
+- Fabric API - https://www.curseforge.com/minecraft/mc-mods/fabric-api
+
 If you like what you see, check out my other mods! :  https://www.curseforge.com/members/spoorn/projects

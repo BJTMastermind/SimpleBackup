@@ -1,34 +1,33 @@
 package org.spoorn.simplebackup;
 
-import static net.minecraft.server.command.CommandManager.literal;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.mojang.brigadier.context.CommandContext;
-import lombok.extern.log4j.Log4j2;
-import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.util.WorldSavePath;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.spoorn.simplebackup.compressors.LZ4Compressor;
 import org.spoorn.simplebackup.compressors.ZipCompressor;
 import org.spoorn.simplebackup.config.ModConfig;
 import org.spoorn.simplebackup.mixin.MinecraftServerAccessor;
 import org.spoorn.simplebackup.util.SimpleBackupUtil;
 
-import java.nio.file.Path;
-import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicReference;
+import com.mojang.brigadier.context.CommandContext;
 
-@Log4j2
+import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.command.CommandManager;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.text.Style;
+import net.minecraft.text.Text;
+import net.minecraft.util.WorldSavePath;
+
 public class SimpleBackup implements ModInitializer {
-    
-    public static final String MODID = "simplebackup";
+    public static final String MOD_ID = "simplebackup";
+    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
     private static final AtomicReference<SimpleBackupTask> manualBackupTask = new AtomicReference<>();
     public static AtomicReference<SimpleBackupTask> simpleBackupTask = new AtomicReference<>();
     public static AtomicReference<SimpleBackupTask> serverEndBackupTask = new AtomicReference<>();
@@ -36,37 +35,37 @@ public class SimpleBackup implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        log.info("Hello from SimpleBackup!");
-        
+        LOGGER.info("Hello from SimpleBackup!");
+
         // Config
-        ModConfig.init();
-        
-        //EXECUTOR_SERVICE = Executors.newFixedThreadPool(ModConfig.get().numThreads, new ThreadFactoryBuilder().setNameFormat("SimpleBackup-%d").build());
-        
+        ModConfig.load();
+
+        //EXECUTOR_SERVICE = Executors.newFixedThreadPool(ModConfigNew.getInstance().numThreads, new ThreadFactoryBuilder().setNameFormat("SimpleBackup-%d").build());
+
         // Lang for backup broadcast messages
         SimpleBackupTask.init();
-        
+
         // Compressors init
         LZ4Compressor.init();
         ZipCompressor.init();
-        
+
         // Create worlds backup folder
         Path backupsPath = SimpleBackupUtil.getBackupPath();
         SimpleBackupUtil.createDirectoryFailSafe(backupsPath);
-        log.info("Worlds backup folder: {}", backupsPath);
+        LOGGER.info("Worlds backup folder: {}", backupsPath);
 
         // Automatic backups
-        final boolean enableAutomaticBackups = ModConfig.get().enableAutomaticBackups;
+        final boolean enableAutomaticBackups = ModConfig.getInstance().enableAutomaticBackups;
         final AtomicReference<Thread> automaticBackupThread = new AtomicReference<>();
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             if (enableAutomaticBackups) {
-                log.info("Automatic backups are enabled");
+                LOGGER.info("Automatic backups are enabled");
                 MinecraftServerAccessor accessor = (MinecraftServerAccessor) server;
                 String worldFolderName = accessor.getSession().getDirectoryName();
                 Path worldSavePath = accessor.getSession().getDirectory(WorldSavePath.ROOT).getParent();
 
-                int backupIntervals = ModConfig.get().backupIntervalInSeconds;
-                log.info("Scheduling a backup every {} seconds...", Math.max(10, backupIntervals));
+                int backupIntervals = ModConfig.getInstance().backupIntervalInSeconds;
+                LOGGER.info("Scheduling a backup every {} seconds...", Math.max(10, backupIntervals));
                 simpleBackupTask.set(SimpleBackupTask.builder(worldFolderName, worldSavePath, server)
                         .backupIntervalInSeconds(backupIntervals)
                         .build());
@@ -75,7 +74,7 @@ public class SimpleBackup implements ModInitializer {
                 automaticBackupThread.set(backupThread);
             }
         });
-        
+
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             SimpleBackupTask autoBackup;
             if ((autoBackup = simpleBackupTask.get()) != null) {
@@ -94,20 +93,20 @@ public class SimpleBackup implements ModInitializer {
                 }
             }
         });
-        
+
         // Backup when server is stopped
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
             SimpleBackupTask autoBackup;
             if (enableAutomaticBackups && (autoBackup = simpleBackupTask.get()) != null) {
-                log.info("Terminating automatic backup thread");
+                LOGGER.info("Terminating automatic backup thread");
                 autoBackup.terminate();
                 if (automaticBackupThread.get() != null) {
                     automaticBackupThread.get().interrupt();
                 }
             }
 
-            if (ModConfig.get().enableServerStoppedBackup) {
-                log.info("Server has stopped - creating a backup");
+            if (ModConfig.getInstance().enableServerStoppedBackup) {
+                LOGGER.info("Server has stopped - creating a backup");
                 MinecraftServerAccessor accessor = (MinecraftServerAccessor) server;
                 String worldFolderName = accessor.getSession().getDirectoryName();
                 Path worldSavePath = accessor.getSession().getDirectory(WorldSavePath.ROOT).getParent();
@@ -124,28 +123,29 @@ public class SimpleBackup implements ModInitializer {
                 }));
             }
         });
-        
+
         // Commands
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            dispatcher.register(literal("simplebackup")
-                    .then(literal("start")
-                        .executes(c -> this.triggerManualBackup(c, ModConfig.get().backupFormat)))
-                    .then(literal("zip")
+            dispatcher.register(CommandManager.literal("simplebackup")
+                    .requires(ctx -> ctx.hasPermissionLevel(4))
+                    .then(CommandManager.literal("start")
+                        .executes(c -> this.triggerManualBackup(c, ModConfig.getInstance().backupFormat)))
+                    .then(CommandManager.literal("zip")
                         .executes(c -> this.triggerManualBackup(c, SimpleBackupUtil.ZIP_FORMAT)))
-                    .then(literal("directory")
+                    .then(CommandManager.literal("directory")
                         .executes(c -> this.triggerManualBackup(c, SimpleBackupUtil.DIRECTORY_FORMAT)))
-                    .then(literal("lz4")
+                    .then(CommandManager.literal("lz4")
                         .executes(c -> this.triggerManualBackup(c, SimpleBackupUtil.LZ4_FORMAT)))
                     );
         });
     }
-    
+
     private int triggerManualBackup(CommandContext<ServerCommandSource> c, String backupFormat) {
-        Map<String, String> broadcastMessages = ModConfig.get().broadcastMessages;
+        Map<String, String> broadcastMessages = ModConfig.getInstance().broadcastMessages;
         try {
             ServerCommandSource commandSource = c.getSource();
             // Check manual backups enabled
-            if (!ModConfig.get().enableManualBackups) {
+            if (!ModConfig.getInstance().enableManualBackups) {
                 commandSource.sendFeedback(() -> Text.literal(broadcastMessages.getOrDefault("simplebackup.manualbackup.disabled",
                         "Manual backups are disabled by the server!"))
                         .setStyle(Style.EMPTY.withColor(16433282)), true);
@@ -155,7 +155,7 @@ public class SimpleBackup implements ModInitializer {
             boolean fromPlayer = commandSource.getPlayer() != null;
 
             // Check permissions
-            if (fromPlayer && !commandSource.getPlayer().hasPermissionLevel(ModConfig.get().permissionLevelForManualBackups)) {
+            if (fromPlayer && !commandSource.getPlayer().hasPermissionLevel(ModConfig.getInstance().permissionLevelForManualBackups)) {
                 commandSource.sendFeedback(() -> Text.literal(broadcastMessages.getOrDefault("simplebackup.manualbackup.notallowed",
                         "You don't have permissions to trigger a manual backup!  Sorry :("))
                         .setStyle(Style.EMPTY.withColor(16433282)), true);
@@ -198,7 +198,7 @@ public class SimpleBackup implements ModInitializer {
             }
             return 1;
         } catch (Exception e) {
-            log.error("Could not create manual backup!", e);
+            LOGGER.error("Could not create manual backup!", e);
             return 0;
         }
     }

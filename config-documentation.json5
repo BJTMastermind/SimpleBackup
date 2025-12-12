@@ -10,13 +10,13 @@
   //True to trigger a backup when server is stopped.  False to disable [default = true]
   //If backup takes longer than max-tick-time set in server.properties, the server thread will wait until backup finishes.
   //Note: this may not properly finish the backup if you try to terminate the process with an interruption
-  //	such as CTRL+C!  Double check the backup file is the size you expect
+  //    such as CTRL+C!  Double check the backup file is the size you expect
   "enableServerStoppedBackup": true,
   //Backup format.  Supports simply backing up as a direct copy of the folder, or ZIP [default = "ZIP"]
   //Supported formats: "DIRECTORY", "ZIP", "LZ4"
-  //	DIRECTORY: copies the world folder as-is
-  //	ZIP: copies the world folder and zips it into a .zip file
-  //	LZ4: archives the world folder into a .tar, then compresses using lz4, making a .tar.lz4 file
+  //    DIRECTORY: copies the world folder as-is
+  //    ZIP: copies the world folder and zips it into a .zip file
+  //    LZ4: archives the world folder into a .tar, then compresses using lz4, making a .tar.lz4 file
   //LZ4 can be extracted/decompressed using 7-Zip-zstd: https://github.com/mcmilk/7-Zip-zstd
   //See https://github.com/spoorn/SimpleBackup/blob/main/README.md for more information on the backup formats
   "backupFormat": "ZIP",
@@ -34,8 +34,8 @@
   //This can be an absolute path as well if you want to store backups in a different location.
   //Note: If you are using backslashes '\' instead of forward slash, you will need to escape it with double backslash '\\'.
   //Examples:
-  //	"backupPath": "F:/mybackups/backup",
-  //	"backupPath": "F:\\mybackups\\backup",
+  //    "backupPath": "F:/mybackups/backup",
+  //    "backupPath": "F:\\mybackups\\backup",
   "backupPath": "backup",
   //Maximum number of backups to keep at a given time.  [default = 10]
   //If we generate a backup, but have more backups than this number, the oldest backup will be deleted.

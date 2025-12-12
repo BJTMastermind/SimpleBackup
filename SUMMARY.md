@@ -19,7 +19,7 @@ You can find a short description of each and when I recommend using which here: 
 
 ## ZIP
 
-Most people should be familiar with the ZIP format.  ZIP is an **archive file format that supports lossless data compression**.  
+Most people should be familiar with the ZIP format.  ZIP is an **archive file format that supports lossless data compression**.
 
 When you zip a file, you are creating a .zip archive file, and on top of that, you can apply some data compression algorithm to the archive, such as the most commonly used DEFLATE algorithm.
 
@@ -29,7 +29,7 @@ The [DEFLATE](https://en.wikipedia.org/wiki/Deflate) algorithm is the most commo
 
 ZIP files are so common, they are supported by most OS's natively.  If you take a ZIP file on Windows for example, by default, there's an option to extract it (aka uncompress) in the right-click menu.
 
-There are many high-level libraries for ZIP which make it extremely [simple to code](https://github.com/spoorn/SimpleBackup/blob/8d462e642ff510f75e0725522d913d91aff035d0/src/main/java/org/spoorn/simplebackup/compressors/ZipCompressor.java#L14).  
+There are many high-level libraries for ZIP which make it extremely [simple to code](https://github.com/spoorn/SimpleBackup/blob/8d462e642ff510f75e0725522d913d91aff035d0/src/main/java/org/spoorn/simplebackup/compressors/ZipCompressor.java#L14).
 
 To throw some numbers out there, using a 3.4 GHz 1-core CPU and a ~75 GB Minecraft world folder, zipping the folder took _**70 min**_, and using WinSCP to transfer the file from one host to another took a disgusting _**9 hours**_.  The compressed ZIP archive was ~65 GB.
 
@@ -83,7 +83,7 @@ public void tar(String targetPath, String destinationPath) throws IOException {
         addFilesToTar(targetPath, "", taos);
         taos.finish();  // Writes ending parts of the tar archive
     } catch (IOException e) {
-        log.error("Failed to tar");
+        SimpleBackup.LOGGER.error("Failed to tar");
         throw e;
     }
 }
@@ -122,7 +122,7 @@ HUGE improvement, but can we do even better?
 
 ## Multi-Threading with LZ4
 
-Theoretically, there should be an obvious itch to use multi-threading in the `.tar.lz4` pipeline discussed above.  Running 75 GB of files/directories through a single pipeline is no way the most optimal we can do.  
+Theoretically, there should be an obvious itch to use multi-threading in the `.tar.lz4` pipeline discussed above.  Running 75 GB of files/directories through a single pipeline is no way the most optimal we can do.
 
 Each file/directory in our target is added as an "Archive Entry" into the Tar archive, and then compressed using LZ4.  If we can use multi-threading to parallel process the target file/directories, and construct the final archive in a consolidated manner, the final output should be identical to what we would have if we used a single thread, but constructed N times faster based on how many threads/processors are available.
 
@@ -148,8 +148,8 @@ First, we need to figure out which slice of the input target files/directories e
 ```java
 /**
  * Scans through a directory and finds the file count intervals, meaning the file number while walking through the
- * path, that split all the files evenly by size.  For balancing multi-threaded processing of a directory recursively. 
- * 
+ * path, that split all the files evenly by size.  For balancing multi-threaded processing of a directory recursively.
+ *
  * @param path Path to process
  * @param numIntervals Number of intervals, or number of threads
  * @return long[] that holds the file number indexes to split at
@@ -160,7 +160,7 @@ public static long[] getFileCountIntervalsFromSize(Path path, int numIntervals) 
     // index of res, file count, current size, previous size
     long[] state = {1, 0, 0, 0};
     long sliceLength = getDirectorySize(path) / numIntervals;
-    
+
     Files.walkFileTree(path, new SimpleFileVisitor<>() {
 
         @Override
@@ -175,7 +175,7 @@ public static long[] getFileCountIntervalsFromSize(Path path, int numIntervals) 
                 state[1]++;
                 return FileVisitResult.CONTINUE;
             } else {
-                return FileVisitResult.TERMINATE;   
+                return FileVisitResult.TERMINATE;
             }
         }
 
@@ -215,9 +215,9 @@ import java.io.OutputStream;
  * For multi-threaded tar archiving in LZ4Compressor, if we are not on the last slice, don't write the archive end entries.
  */
 public class CustomTarArchiveOutputStream extends TarArchiveOutputStream {
-    
+
     private final boolean isLast;
-    
+
     public CustomTarArchiveOutputStream(OutputStream os, boolean isLast) {
         super(os);
         this.isLast = isLast;
@@ -238,14 +238,14 @@ Now let's put this together and create the Runnable that each thread will run:
 
 ```java
 public static class RunTarLZ4 implements Runnable {
-        
+
     private final String targetPath;  // target input path
     private final String destinationPath;  // destination output file i.e. the temporary file this thread will write to
     private final long fileCount;  // Total number of files in our target path
     private final int slice;  // The slice we are looking at, indexed at 0
     private final int totalSlices;  // The total number of slices.  Used to know if we are on the last slice to write the Tar Archive footers
     final FileOutputStream fos;  // Output Stream to the file output for this task
-    
+
     private final long start;    // inclusive
     private final long end;   // exclusive
     private int count;  // Current file number this task is processing
@@ -267,14 +267,14 @@ public static class RunTarLZ4 implements Runnable {
     public void run() {
         try (LZ4FrameOutputStream outputStream = new LZ4FrameOutputStream(this.fos);
                 CustomTarArchiveOutputStream taos = new CustomTarArchiveOutputStream(outputStream, this.slice == this.totalSlices - 1)) {
-            
-            log.info("Starting backup for slice {} with start={}, end={}", this.slice, this.start, this.end - 1);
+
+            SimpleBackup.LOGGER.info("Starting backup for slice {} with start={}, end={}", this.slice, this.start, this.end - 1);
             addFilesToTar(targetPath, "", taos);
-            log.info("Finished compressed archive for slice {}", this.slice);
-            
+            SimpleBackup.LOGGER.info("Finished compressed archive for slice {}", this.slice);
+
             taos.finish();
         } catch (IOException e) {
-            log.error("Could not lz4 compress target=[" + targetPath + "] to [" + destinationPath + "] for slice " + slice, e);
+            SimpleBackup.LOGGER.error("Could not lz4 compress target=[" + targetPath + "] to [" + destinationPath + "] for slice " + slice, e);
             throw new RuntimeException(e);
         }
     }
@@ -282,7 +282,7 @@ public static class RunTarLZ4 implements Runnable {
     // Base needed as we are branching off of a child directory, so the initial source will be the virtual "root" of the tar
     private void addFilesToTar(String path, String base, TarArchiveOutputStream taos) throws IOException {
         File file = new File(path);
-            
+
         // If we are out of the bounds of our slice, skip
         // This could probably be optimized to not have to walk through the entire file tree again.
         // Instead, we could have cached the exact files each slice should handle.
@@ -301,9 +301,9 @@ public static class RunTarLZ4 implements Runnable {
         if (file.isFile()) {
             // Write file content to archive
             try (FileInputStream fis = new FileInputStream(file)) {
-                IOUtils.copy(fis, taos, ModConfig.get().multiThreadBufferSize);
+                IOUtils.copy(fis, taos, ModConfigNew.getInstance().multiThreadBufferSize);
                 taos.closeArchiveEntry();
-                
+
                 count++;
             }
         } else {
@@ -345,14 +345,14 @@ public static boolean compress(String targetPath, String destinationPath) {
     try {
         // Number of threads for multi-threading.  Set to 1 for single-thread processing
         // You can play around with this number to optimize for your use case
-        int numThreads = 4; 
+        int numThreads = 4;
 
         // We'll submit our runnable tasks using an executor service with `numThreads` threads in the pool
         final ExecutorService EXECUTOR_SERVICE = Executors.newFixedThreadPool(numThreads);
 
         // Get our file count
         long fileCount = fileCount(Path.of(targetPath));
-        
+
         // Get the file number intervals we discussed earlier
         long[] fileNumIntervals = getFileCountIntervalsFromSize(Path.of(targetPath), numThreads);
 
@@ -370,11 +370,11 @@ public static boolean compress(String targetPath, String destinationPath) {
                 // Spin up a thread for each Runnable task
 
                 // start of the slice is from our fileNumIntervals
-                long start = fileNumIntervals[i];   
+                long start = fileNumIntervals[i];
 
                 // end of the slice is 1 before the next fileNumInterval, or if we are on the last slice
                 // we can simply set this to the fileCount to cover the rest of the files
-                long end = i == numThreads - 1 ? fileCount : fileNumIntervals[i + 1];   
+                long end = i == numThreads - 1 ? fileCount : fileNumIntervals[i + 1];
 
                 // Each Runnable task will be outputting to a temporary file, which is the same name as the output file except
                 // suffixed with "_sliceNum.tmp"
@@ -392,7 +392,7 @@ public static boolean compress(String targetPath, String destinationPath) {
                 futures[i].get();
                 runnables[i].fos.close();   // Clean up and close the .tmp file OutputStreams
             }
-            
+
             // At this point, we have all our .tmp files which are standalone .tar.lz4 compressed archives for each  slice
             // The .tmp files can't be opened themselves however, as they are a sliced part of the final output file.
             // Here, we can now merge all the .tmp files we created, into the single final output file
@@ -408,7 +408,7 @@ public static boolean compress(String targetPath, String destinationPath) {
             FileInputStream[] tmpFiles = new FileInputStream[numThreads];
             FileChannel[] tmpChannels = new FileChannel[numThreads];
             long[] fileChannelOffsets = new long[numThreads];
-            
+
             // This grabs a FileChannel to read for each .tmp file, and also calculates what all the fileChannel position offsets
             // we should use for each Thread, based on the size in bytes of each .tmp file
             for (int i = 0; i < numThreads; i++) {
@@ -418,7 +418,7 @@ public static boolean compress(String targetPath, String destinationPath) {
                     fileChannelOffsets[i + 1] = fileChannelOffsets[i] + tmpChannels[i].size();
                 }
             }
-            
+
             // Create an AsynchronousFileChannel for the final output `.tar.lz4` file
             // This channel is has the capability to WRITE to the file, or CREATE it if it doesn't yet exist
             AsynchronousFileChannel destChannel = AsynchronousFileChannel.open(Path.of(destinationPath + ".tar.lz4"), WRITE, CREATE);
@@ -427,7 +427,7 @@ public static boolean compress(String targetPath, String destinationPath) {
                 // Let's again spin up a thread for each .tmp file to write to its slice, or region in the final output file
                 futures[i] = EXECUTOR_SERVICE.submit(() -> {
                     try {
-                        log.info("Writing region for backup slice {}", finalI);
+                        SimpleBackup.LOGGER.info("Writing region for backup slice {}", finalI);
                         String tmpFilePath = destinationPath + "_" + finalI + ".tmp";
 
                         // You can play around with the buffer size to optimize
@@ -435,7 +435,7 @@ public static boolean compress(String targetPath, String destinationPath) {
 
                         // Let's get our FileChannel which we opened earlier, for the .tmp file
                         FileChannel tmpChannel = tmpChannels[finalI];
-                    
+
                         // The position in the output file this thread will be writing to
                         long pos = fileChannelOffsets[finalI];
                         int read;
@@ -453,7 +453,7 @@ public static boolean compress(String targetPath, String destinationPath) {
                         tmpChannel.close();
                         tmpFiles[finalI].close();
                         Files.deleteIfExists(Path.of(tmpFilePath));
-                        log.info("Finished writing region for backup slice {}", finalI);
+                        SimpleBackup.LOGGER.info("Finished writing region for backup slice {}", finalI);
                     } catch (Exception e) {
                         throw new RuntimeException(e);
                     }
@@ -471,7 +471,7 @@ public static boolean compress(String targetPath, String destinationPath) {
 
         return true;
     } catch (Exception e) {
-        log.error("Could not lz4 compress target=[" + targetPath + "] to [" + destinationPath + "]", e);
+        SimpleBackup.LOGGER.error("Could not lz4 compress target=[" + targetPath + "] to [" + destinationPath + "]", e);
         return false;
     }
 }

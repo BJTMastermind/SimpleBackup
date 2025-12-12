@@ -2,14 +2,12 @@
   "required": true,
   "minVersion": "0.8",
   "package": "org.spoorn.simplebackup.mixin",
-  "compatibilityLevel": "JAVA_17",
+  "compatibilityLevel": "JAVA_21",
   "mixins": [
     "MinecraftServerAccessor",
     "DedicatedServerWatchdogMixin"
   ],
-  "client": [
-    "MinecraftClientMixin"
-  ],
+  "client": [],
   "injectors": {
     "defaultRequire": 1
   }

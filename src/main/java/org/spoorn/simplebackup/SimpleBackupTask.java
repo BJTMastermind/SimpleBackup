@@ -1,25 +1,21 @@
 package org.spoorn.simplebackup;
 
-import lombok.extern.log4j.Log4j2;
-import net.minecraft.network.message.MessageType;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.PlayerManager;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import org.spoorn.simplebackup.compressors.LZ4Compressor;
-import org.spoorn.simplebackup.compressors.ZipCompressor;
-import org.spoorn.simplebackup.config.ModConfig;
-import org.spoorn.simplebackup.util.ClientUtil;
-import org.spoorn.simplebackup.util.SimpleBackupUtil;
-
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
-@Log4j2
+import org.spoorn.simplebackup.compressors.LZ4Compressor;
+import org.spoorn.simplebackup.compressors.ZipCompressor;
+import org.spoorn.simplebackup.config.ModConfig;
+import org.spoorn.simplebackup.util.SimpleBackupUtil;
+
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.PlayerManager;
+import net.minecraft.text.Style;
+import net.minecraft.text.Text;
+
 public class SimpleBackupTask implements Runnable {
-    
     private static final DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
     private static Text BROADCAST1;
     private static Text SUCCESS_BROADCAST;
@@ -34,7 +30,7 @@ public class SimpleBackupTask implements Runnable {
     private final MinecraftServer server;
     private final long backupIntervalInMillis;
     private final String backupFormat;
-    
+
     private boolean terminated = false;
 
     SimpleBackupTask(String worldFolderName, Path worldSavePath, MinecraftServer server, int backupIntervalInSeconds, String backupFormat) {
@@ -44,16 +40,16 @@ public class SimpleBackupTask implements Runnable {
         this.backupIntervalInMillis = backupIntervalInSeconds * 1000L;
         this.backupFormat = backupFormat;
     }
-    
+
     public static void init() {
-        Map<String, String> broadcastMessages = ModConfig.get().broadcastMessages;
+        Map<String, String> broadcastMessages = ModConfig.getInstance().broadcastMessages;
         BROADCAST1 = Text.literal(broadcastMessages.getOrDefault("simplebackup.backup.broadcast", "Starting server backup...")).setStyle(Style.EMPTY.withColor(13543679));
         SUCCESS_BROADCAST = Text.literal(broadcastMessages.getOrDefault("simplebackup.backup.success.broadcast", "Server was successfully backed up to "));
         FAILED_BROADCAST1 = Text.literal(broadcastMessages.getOrDefault("simplebackup.backup.failed.broadcast1", "Server failed to backup to "));
         FAILED_BROADCAST2 = Text.literal(broadcastMessages.getOrDefault("simplebackup.backup.failed.broadcast2", ".  Please check the server logs for errors!"));
     }
 
-    public static SimpleBackupTaskBuilder builder(final String worldFolderName, final Path worldSavePath, 
+    public static SimpleBackupTaskBuilder builder(final String worldFolderName, final Path worldSavePath,
                                                   final MinecraftServer server) {
         return new SimpleBackupTaskBuilder().worldFolderName(worldFolderName).worldSavePath(worldSavePath).server(server);
     }
@@ -62,7 +58,7 @@ public class SimpleBackupTask implements Runnable {
                                                   final MinecraftServer server, String backupFormat) {
         return new SimpleBackupTaskBuilder().worldFolderName(worldFolderName).worldSavePath(worldSavePath).server(server).backupFormat(backupFormat);
     }
-    
+
     public void terminate() {
         this.terminated = true;
         synchronized (this.lock) {
@@ -78,7 +74,7 @@ public class SimpleBackupTask implements Runnable {
         if (!terminated && this.backupIntervalInMillis > 1000) {
             waitToContinue(playerManager);
         }
-        
+
         // Automatic backup loops
         while (!terminated) {
             backup();
@@ -89,10 +85,10 @@ public class SimpleBackupTask implements Runnable {
                 break;
             }
         }
-        
-        log.info("SimpleBackupTask Finished!");
+
+        SimpleBackup.LOGGER.info("SimpleBackupTask Finished!");
     }
-    
+
     public void backup() {
         this.isProcessing = true;
         PlayerManager playerManager = this.server.getPlayerManager();
@@ -115,15 +111,15 @@ public class SimpleBackupTask implements Runnable {
                 && SimpleBackupUtil.deleteStaleBackupFiles();
         Text relFolderPath = Text.literal(broadcastBackupPath);
         if (copied) {
-            log.info("Successfully backed up world [{}] to [{}]", this.worldFolderName, broadcastBackupPath);
+            SimpleBackup.LOGGER.info("Successfully backed up world [{}] to [{}]", this.worldFolderName, broadcastBackupPath);
             SimpleBackupUtil.broadcastMessage(SUCCESS_BROADCAST.copyContentOnly().append(relFolderPath).setStyle(Style.EMPTY.withColor(8060843)), playerManager);
         } else {
-            log.error("Server backup for world [{}] failed!  Check the logs for errors.", this.worldFolderName);
+            SimpleBackup.LOGGER.error("Server backup for world [{}] failed!  Check the logs for errors.", this.worldFolderName);
             SimpleBackupUtil.broadcastMessage(FAILED_BROADCAST1.copyContentOnly().append(relFolderPath).append(FAILED_BROADCAST2).setStyle(Style.EMPTY.withColor(16754871)), playerManager);
         }
         this.isProcessing = false;
     }
-    
+
     // This doesn't account for spurious wakeups!
     private void waitToContinue(PlayerManager playerManager) {
         // Automatic periodic backups
@@ -134,8 +130,8 @@ public class SimpleBackupTask implements Runnable {
             // online, or the single player game is paused.  This does mean the next backup's changed content
             // might span a duration less than the backup intervals, but this is intended as I think it's better
             // than trying to make sure each backup has an exact "online running" difference from the previous.
-            if ((ModConfig.get().onlyBackupIfPlayersOnline && playerManager.getCurrentPlayerCount() == 0)
-                || (this.server.isSingleplayer() && ClientUtil.isPaused())) {
+            if ((ModConfig.getInstance().onlyBackupIfPlayersOnline && playerManager.getCurrentPlayerCount() == 0)
+                || (this.server.isSingleplayer())) {
                 // Wait until a player logs on
                 synchronized (this.lock) {
                     this.lock.wait();
@@ -147,9 +143,9 @@ public class SimpleBackupTask implements Runnable {
             }
         } catch (InterruptedException e) {
             if (this.terminated) {
-                log.info("SimpleBackupTask interrupted by main thread");
+                SimpleBackup.LOGGER.info("SimpleBackupTask interrupted by main thread");
             } else {
-                log.error("SimpleBackupTask thread interrupted", e);
+                SimpleBackup.LOGGER.error("SimpleBackupTask thread interrupted", e);
             }
         }
     }
@@ -162,7 +158,7 @@ public class SimpleBackupTask implements Runnable {
         private Path worldSavePath;
         private MinecraftServer server;
         private int backupIntervalInSeconds = -1;
-        private String backupFormat = ModConfig.get().backupFormat;
+        private String backupFormat = ModConfig.getInstance().backupFormat;
 
         SimpleBackupTaskBuilder() {
         }
@@ -186,7 +182,7 @@ public class SimpleBackupTask implements Runnable {
             this.backupIntervalInSeconds = Math.max(10, backupIntervalInSeconds);
             return this;
         }
-        
+
         public SimpleBackupTaskBuilder backupFormat(String backupFormat) {
             this.backupFormat = backupFormat;
             return this;
@@ -197,8 +193,8 @@ public class SimpleBackupTask implements Runnable {
         }
 
         public String toString() {
-            return "SimpleBackupTask.SimpleBackupTaskBuilder(worldFolderName=" + this.worldFolderName + ", worldSavePath=" 
-                    + this.worldSavePath + ", server=" + this.server + ", backupIntervalInSeconds=" + this.backupIntervalInSeconds 
+            return "SimpleBackupTask.SimpleBackupTaskBuilder(worldFolderName=" + this.worldFolderName + ", worldSavePath="
+                    + this.worldSavePath + ", server=" + this.server + ", backupIntervalInSeconds=" + this.backupIntervalInSeconds
                     + ", backupFormat=" + this.backupFormat + ")";
         }
     }

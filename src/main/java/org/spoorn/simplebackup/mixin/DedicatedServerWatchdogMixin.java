@@ -1,8 +1,6 @@
 package org.spoorn.simplebackup.mixin;
 
 import net.minecraft.server.dedicated.DedicatedServerWatchdog;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -13,9 +11,6 @@ import org.spoorn.simplebackup.SimpleBackupTask;
 
 @Mixin(DedicatedServerWatchdog.class)
 public class DedicatedServerWatchdogMixin {
-    
-    private static Logger log = LogManager.getLogger("DedicatedServerWatchdogMixin");
-
     @Shadow @Final private long maxTickTime;
 
     /**
@@ -27,11 +22,11 @@ public class DedicatedServerWatchdogMixin {
         if (n > this.maxTickTime) {
             SimpleBackupTask serverEndBackupTask = SimpleBackup.serverEndBackupTask.get();
             if (serverEndBackupTask != null && serverEndBackupTask.isProcessing) {
-                log.info("SimpleBackup server end backup task is still ongoing past max-tick-time.  Waiting for it to finish before stopping server...");
+                SimpleBackup.LOGGER.info("SimpleBackup server end backup task is still ongoing past max-tick-time.  Waiting for it to finish before stopping server...");
                 return -1;  // Don't alert watchdog
             }
         }
-        
+
         return n;
     }
 }

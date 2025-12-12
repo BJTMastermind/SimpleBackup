@@ -2,21 +2,19 @@
   "schemaVersion": 1,
   "id": "simplebackup",
   "version": "${version}",
-  "name": "simplebackup",
+  "name": "Simple Backup",
   "description": "Simple world backup utility",
   "authors": [
-    "spoorn"
+    "BJTMastermind",
+    "spoorn (Upstream Maintainer)"
   ],
   "contact": {
-    "website": "https://www.curseforge.com/minecraft/mc-mods/simple-backup"
+    "sources": "https://github.com/BJTMastermind/SimpleBackup"
   },
-  "license": "LGPL-3.0",
+  "license": "LGPL-3.0-or-later",
   "icon": "assets/simplebackup/icon.png",
   "environment": "*",
   "entrypoints": {
-    "client": [
-      "org.spoorn.simplebackup.client.SimpleBackupClient"
-    ],
     "main": [
       "org.spoorn.simplebackup.SimpleBackup"
     ]
@@ -25,8 +23,12 @@
     "simplebackup.mixins.json"
   ],
   "depends": {
-    "fabricloader": "*",
-    "fabric": "*",
-    "minecraft": ">=1.20"
+    "fabricloader": ">=0.18.1",
+    "fabric-api": "*",
+    "minecraft": ">=1.20",
+    "java": ">=21"
+  },
+  "suggests": {
+    "another-mod": "*"
   }
 }
