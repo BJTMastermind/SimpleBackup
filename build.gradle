@@ -53,14 +53,9 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
     // Non-mod dependencies
-    implementation("blue.endless:jankson:1.2.3")
-    include("blue.endless:jankson:1.2.3")
-
-    implementation("net.lingala.zip4j:zip4j:${project.zip4j_version}")
-    include("net.lingala.zip4j:zip4j:${project.zip4j_version}")
-
-    implementation("com.github.spoorn:tar-lz4-java:${project.tarlz4java_version}")
-    include("com.github.spoorn:tar-lz4-java:${project.tarlz4java_version}")
+    modImplementation include("blue.endless:jankson:1.2.3")
+    modImplementation include("net.lingala.zip4j:zip4j:${project.zip4j_version}")
+    modImplementation include("com.github.spoorn:tar-lz4-java:${project.tarlz4java_version}")
 }
 
 processResources {
